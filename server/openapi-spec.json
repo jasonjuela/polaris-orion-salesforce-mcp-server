@@ -1,0 +1,680 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Salesforce MCP Assistant API",
+    "description": "OpenAI-compatible tools for Salesforce operations, providing comprehensive SOQL/SOSL queries, CRUD operations, metadata retrieval, and batch processing capabilities designed to enable AI-powered Salesforce interactions through natural language.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Salesforce MCP Assistant",
+      "url": "https://your-domain.replit.app"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://your-domain.replit.app/api",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:5000/api",
+      "description": "Development server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Query",
+      "description": "SOQL and SOSL query operations"
+    },
+    {
+      "name": "CRUD",
+      "description": "Create, Read, Update, Delete operations"
+    },
+    {
+      "name": "Bulk",
+      "description": "Bulk operations using Salesforce Bulk API 2.0"
+    },
+    {
+      "name": "Metadata",
+      "description": "Schema and metadata operations"
+    },
+    {
+      "name": "Monitoring",
+      "description": "System monitoring and diagnostics"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "SalesforceAuth": {
+        "type": "object",
+        "required": ["access_token", "instance_url"],
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Salesforce OAuth access token",
+            "example": "00D000000000000!AQEAQGFud0fakeTokenExample123456789"
+          },
+          "instance_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Salesforce instance URL",
+            "example": "https://yourinstance.salesforce.com"
+          }
+        }
+      },
+      "SalesforceError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["AUTHENTICATION", "VALIDATION", "RATE_LIMIT", "SERVER_ERROR", "NETWORK", "UNKNOWN"]
+              },
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "recoverable": {
+                "type": "boolean"
+              },
+              "suggestedAction": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object"
+              },
+              "retryAfter": {
+                "type": "integer",
+                "description": "Seconds to wait before retrying (for rate limit errors)"
+              }
+            }
+          }
+        }
+      },
+      "SOQLQueryRequest": {
+        "allOf": [
+          {"$ref": "#/components/schemas/SalesforceAuth"},
+          {
+            "type": "object",
+            "required": ["soql"],
+            "properties": {
+              "soql": {
+                "type": "string",
+                "description": "SOQL query string",
+                "example": "SELECT Id, Name, Email FROM Contact LIMIT 10"
+              }
+            }
+          }
+        ]
+      },
+      "SOQLQueryResponse": {
+        "type": "object",
+        "properties": {
+          "totalSize": {
+            "type": "integer"
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attributes": {
+                  "type": "object",
+                  "properties": {
+                    "type": {"type": "string"},
+                    "url": {"type": "string"}
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "CreateRecordRequest": {
+        "allOf": [
+          {"$ref": "#/components/schemas/SalesforceAuth"},
+          {
+            "type": "object",
+            "required": ["object_name", "fields"],
+            "properties": {
+              "object_name": {
+                "type": "string",
+                "description": "Salesforce object API name",
+                "example": "Contact"
+              },
+              "fields": {
+                "type": "object",
+                "description": "Field values for the new record",
+                "example": {
+                  "FirstName": "Jane",
+                  "LastName": "Smith",
+                  "Email": "jane.smith@example.com"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "CreateRecordResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "ID of the created record"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "errors": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      },
+      "BulkJobResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Bulk job ID"
+          },
+          "operation": {
+            "type": "string",
+            "enum": ["insert", "update", "upsert", "delete", "query"]
+          },
+          "object": {
+            "type": "string",
+            "description": "Salesforce object name"
+          },
+          "createdDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["Open", "InProgress", "JobComplete", "Failed", "Aborted"]
+          },
+          "concurrencyMode": {
+            "type": "string",
+            "enum": ["Parallel", "Serial"]
+          },
+          "contentType": {
+            "type": "string",
+            "enum": ["CSV", "JSON"]
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Bad request or validation error",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/SalesforceError"}
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Authentication failed",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/SalesforceError"}
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/SalesforceError"}
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/SalesforceError"}
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/runSOQLQuery": {
+      "post": {
+        "tags": ["Query"],
+        "summary": "Execute SOQL Query",
+        "description": "Execute a SOQL (Salesforce Object Query Language) query to retrieve data from Salesforce objects",
+        "operationId": "runSOQLQuery",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/SOQLQueryRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Query executed successfully",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SOQLQueryResponse"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/ServerError"}
+        },
+        "x-rate-limit": "20 requests per minute"
+      }
+    },
+    "/runSOSLQuery": {
+      "post": {
+        "tags": ["Query"],
+        "summary": "Execute SOSL Query",
+        "description": "Execute a SOSL (Salesforce Object Search Language) query for text search across multiple objects",
+        "operationId": "runSOSLQuery",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {"$ref": "#/components/schemas/SalesforceAuth"},
+                  {
+                    "type": "object",
+                    "required": ["search_term", "objects"],
+                    "properties": {
+                      "search_term": {
+                        "type": "string",
+                        "description": "Text to search for",
+                        "example": "John"
+                      },
+                      "objects": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Objects to search in",
+                        "example": ["Contact", "Account"]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search executed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "searchRecords": {
+                      "type": "array",
+                      "items": {"type": "object"}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/ServerError"}
+        },
+        "x-rate-limit": "20 requests per minute"
+      }
+    },
+    "/createRecord": {
+      "post": {
+        "tags": ["CRUD"],
+        "summary": "Create Record",
+        "description": "Create a new record in a Salesforce object",
+        "operationId": "createRecord",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/CreateRecordRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Record created successfully",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/CreateRecordResponse"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/ServerError"}
+        },
+        "x-rate-limit": "30 requests per minute"
+      }
+    },
+    "/updateRecord": {
+      "post": {
+        "tags": ["CRUD"],
+        "summary": "Update Record",
+        "description": "Update an existing record in a Salesforce object",
+        "operationId": "updateRecord",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {"$ref": "#/components/schemas/SalesforceAuth"},
+                  {
+                    "type": "object",
+                    "required": ["object_name", "record_id", "fields"],
+                    "properties": {
+                      "object_name": {
+                        "type": "string",
+                        "example": "Contact"
+                      },
+                      "record_id": {
+                        "type": "string",
+                        "description": "ID of the record to update",
+                        "example": "003000000000002"
+                      },
+                      "fields": {
+                        "type": "object",
+                        "example": {"Email": "updated@example.com"}
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Record updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {"type": "boolean"},
+                    "id": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/ServerError"}
+        },
+        "x-rate-limit": "30 requests per minute"
+      }
+    },
+    "/deleteRecord": {
+      "post": {
+        "tags": ["CRUD"],
+        "summary": "Delete Record",
+        "description": "Delete a record from a Salesforce object",
+        "operationId": "deleteRecord",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {"$ref": "#/components/schemas/SalesforceAuth"},
+                  {
+                    "type": "object",
+                    "required": ["object_name", "record_id"],
+                    "properties": {
+                      "object_name": {
+                        "type": "string",
+                        "example": "Contact"
+                      },
+                      "record_id": {
+                        "type": "string",
+                        "example": "003000000000002"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Record deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {"type": "boolean"},
+                    "id": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/ServerError"}
+        },
+        "x-rate-limit": "30 requests per minute"
+      }
+    },
+    "/executeBulkQuery": {
+      "post": {
+        "tags": ["Bulk"],
+        "summary": "Execute Bulk Query",
+        "description": "Execute a bulk query for large datasets using Salesforce Bulk API 2.0",
+        "operationId": "executeBulkQuery",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {"$ref": "#/components/schemas/SalesforceAuth"},
+                  {
+                    "type": "object",
+                    "required": ["soql"],
+                    "properties": {
+                      "soql": {
+                        "type": "string",
+                        "description": "SOQL query for bulk processing",
+                        "example": "SELECT Id, Name, Email FROM Contact WHERE CreatedDate = TODAY"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bulk query initiated successfully",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/BulkJobResponse"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/ServerError"}
+        },
+        "x-rate-limit": "5 requests per 5 minutes"
+      }
+    },
+    "/getObjectSchema": {
+      "post": {
+        "tags": ["Metadata"],
+        "summary": "Get Object Schema",
+        "description": "Retrieve metadata and schema information for a Salesforce object",
+        "operationId": "getObjectSchema",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {"$ref": "#/components/schemas/SalesforceAuth"},
+                  {
+                    "type": "object",
+                    "required": ["object_name"],
+                    "properties": {
+                      "object_name": {
+                        "type": "string",
+                        "description": "Salesforce object API name",
+                        "example": "Contact"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Object schema retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {"type": "string"},
+                    "label": {"type": "string"},
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {"type": "string"},
+                          "type": {"type": "string"},
+                          "label": {"type": "string"},
+                          "length": {"type": "integer"},
+                          "unique": {"type": "boolean"},
+                          "createable": {"type": "boolean"},
+                          "updateable": {"type": "boolean"}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "500": {"$ref": "#/components/responses/ServerError"}
+        },
+        "x-rate-limit": "50 requests per minute"
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": ["Monitoring"],
+        "summary": "Health Check",
+        "description": "Get system health status and basic metrics",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "System is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string", "example": "healthy"},
+                    "uptime": {"type": "integer"},
+                    "memory": {
+                      "type": "object",
+                      "properties": {
+                        "used": {"type": "integer"},
+                        "total": {"type": "integer"}
+                      }
+                    },
+                    "requests": {
+                      "type": "object",
+                      "properties": {
+                        "total": {"type": "integer"},
+                        "lastHour": {"type": "integer"},
+                        "averageResponseTime": {"type": "number"},
+                        "errorRate": {"type": "number"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {"$ref": "#/components/responses/ServerError"}
+        }
+      }
+    },
+    "/rate-limits": {
+      "get": {
+        "tags": ["Monitoring"],
+        "summary": "Rate Limit Status",
+        "description": "Get current rate limiting configuration and queue status",
+        "operationId": "getRateLimitStatus",
+        "responses": {
+          "200": {
+            "description": "Rate limit status retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rateLimits": {"type": "object"},
+                    "queues": {"type": "object"},
+                    "description": {
+                      "type": "object",
+                      "properties": {
+                        "general": {"type": "string"},
+                        "query": {"type": "string"},
+                        "bulk": {"type": "string"},
+                        "crud": {"type": "string"},
+                        "metadata": {"type": "string"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
